@@ -11,6 +11,7 @@ use std::time::Duration;
 use uuid::Uuid;
 
 use super::authz::Authorizer;
+use super::WarehouseIdent;
 
 pub mod tabular_expiration_queue;
 pub mod tabular_purge_queue;
@@ -88,6 +89,13 @@ impl TaskQueues {
     }
 }
 
+/// A filter to select tasks
+#[derive(Debug, Clone, PartialEq)]
+pub enum TaskFilter {
+    WarehouseId(WarehouseIdent),
+    TaskIds(Vec<Uuid>),
+}
+
 #[async_trait]
 pub trait TaskQueue: Debug {
     type Task: Send + Sync + 'static;
@@ -100,7 +108,7 @@ pub trait TaskQueue: Debug {
     async fn pick_new_task(&self) -> crate::api::Result<Option<Self::Task>>;
     async fn record_success(&self, id: Uuid) -> crate::api::Result<()>;
     async fn record_failure(&self, id: Uuid, error_details: &str) -> crate::api::Result<()>;
-    async fn cancel_task(&self, id: Uuid, reason: &str) -> crate::api::Result<()>;
+    async fn cancel_pending_tasks(&self, filter: TaskFilter) -> crate::api::Result<()>;
 
     async fn retrying_record_success(&self, task: &Task) {
         self.retrying_record_success_or_failure(task, Status::Success)
@@ -117,13 +125,16 @@ pub trait TaskQueue: Debug {
         while let Err(e) = match result {
             Status::Success => self.record_success(task.task_id).await,
             Status::Failure(details) => self.record_failure(task.task_id, details).await,
-            Status::Cancelled(details) => self.cancel_task(task.task_id, details).await,
+            Status::Cancelled(_) => {
+                self.cancel_pending_tasks(TaskFilter::TaskIds(vec![task.task_id]))
+                    .await
+            }
         } {
-            tracing::error!("Failed to record {}: {:?}", result.as_str(), e);
+            tracing::error!("Failed to record {}: {:?}", result, e);
             tokio::time::sleep(Duration::from_secs(1 + retry)).await;
             retry += 1;
             if retry > 5 {
-                tracing::error!("Giving up trying to record {}.", result.as_str());
+                tracing::error!("Giving up trying to record {}.", result);
                 break;
             }
         }
@@ -134,7 +145,7 @@ pub trait TaskQueue: Debug {
 #[cfg_attr(feature = "sqlx-postgres", derive(FromRow))]
 pub struct Task {
     pub task_id: Uuid,
-    pub task_name: String,
+    pub queue_name: String,
     pub status: TaskStatus,
     pub picked_up_at: Option<chrono::DateTime<Utc>>,
     pub parent_task_id: Option<Uuid>,
@@ -162,13 +173,12 @@ pub enum Status<'a> {
     Cancelled(&'a str),
 }
 
-impl<'a> Status<'a> {
-    #[must_use]
-    pub fn as_str(&self) -> &str {
+impl<'a> std::fmt::Display for Status<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Status::Success => "success",
-            Status::Failure(_) => "failure",
-            Status::Cancelled(reason) => &format!("cancelled-{reason}"),
+            Status::Success => write!(f, "success"),
+            Status::Failure(details) => write!(f, "failure ({})", details),
+            Status::Cancelled(reason) => write!(f, "cancelled ({})", reason),
         }
     }
 }

@@ -10,6 +10,8 @@ use crate::implementations::postgres::task_queues::{
 use crate::service::task_queue::tabular_purge_queue::{TabularPurgeInput, TabularPurgeTask};
 use crate::service::task_queue::{TaskQueue, TaskQueueConfig};
 
+use super::{cancel_pending_tasks, TaskFilter};
+
 super::impl_pg_task_queue!(TabularPurgeQueue);
 
 #[async_trait]
@@ -151,6 +153,10 @@ impl TaskQueue for TabularPurgeQueue {
         })?;
 
         Ok(())
+    }
+
+    async fn cancel_pending_tasks(&self, filter: TaskFilter) -> crate::api::Result<()> {
+        cancel_pending_tasks(&self.pg_queue, filter, self.queue_name()).await
     }
 }
 

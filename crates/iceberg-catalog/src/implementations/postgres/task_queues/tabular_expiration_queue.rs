@@ -8,9 +8,11 @@ use crate::implementations::postgres::DeletionKind;
 use crate::service::task_queue::tabular_expiration_queue::{
     TabularExpirationInput, TabularExpirationTask,
 };
-use crate::service::task_queue::{TaskQueue, TaskQueueConfig};
+use crate::service::task_queue::{TaskFilter, TaskQueue, TaskQueueConfig};
 use async_trait::async_trait;
 use uuid::Uuid;
+
+use super::cancel_pending_tasks;
 
 super::impl_pg_task_queue!(TabularExpirationQueue);
 
@@ -159,47 +161,18 @@ impl TaskQueue for TabularExpirationQueue {
         .await
     }
 
-    async fn cancel_task(&self, id: Uuid, reason: &str) -> crate::api::Result<()> {
-        let mut transaction = self
-            .pg_queue
-            .read_write
-            .write_pool
-            .begin()
-            .await
-            .map_err(|e| e.into_error_model("fail".into()))?;
-
-        let task = sqlx::query!(
-            r#"UPDATE task SET status = 'cancelled'
-               WHERE task_id = $1 AND status = 'pending' RETURNING task_id"#,
-            id
-        )
-        .fetch_optional(&mut *transaction)
-        .await
-        .map_err(|e| {
-            tracing::error!(?e, "failed to select task");
-            e.into_error_model("fail".into())
-        })?;
-
-        if let Some(record) = task {
-            tracing::debug!("Task cancelled: '{}'", record.task_id);
-        } else {
-            tracing::info!("Task not found or already completed");
-        }
-
-        transaction.commit().await.map_err(|e| {
-            tracing::error!(?e, "failed to commit");
-            e.into_error_model("fail".into())
-        })?;
-
-        Ok(())
+    async fn cancel_pending_tasks(&self, filter: TaskFilter) -> crate::api::Result<()> {
+        cancel_pending_tasks(&self.pg_queue, filter, self.queue_name()).await
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::super::test::setup;
+    use crate::api::management::v1::warehouse;
     use crate::service::task_queue::tabular_expiration_queue::TabularExpirationInput;
-    use crate::service::task_queue::{TaskQueue, TaskQueueConfig};
+    use crate::service::task_queue::{TaskFilter, TaskQueue, TaskQueueConfig};
+    use crate::WarehouseIdent;
     use sqlx::PgPool;
 
     #[sqlx::test]
@@ -236,5 +209,29 @@ mod test {
             task.is_none(),
             "There should only be one task, idempotency didn't work."
         );
+    }
+
+    #[sqlx::test]
+    async fn test_cancel_pending_tasks(pool: PgPool) {
+        let config = TaskQueueConfig::default();
+        let pg_queue = setup(pool, config);
+        let queue = super::TabularExpirationQueue { pg_queue };
+        let warehouse_ident: WarehouseIdent = uuid::Uuid::now_v7().into();
+        let input = TabularExpirationInput {
+            tabular_id: uuid::Uuid::new_v4(),
+            warehouse_ident,
+            tabular_type: crate::api::management::v1::TabularType::Table,
+            purge: false,
+            expire_at: chrono::Utc::now(),
+        };
+        queue.enqueue(input.clone()).await.unwrap();
+
+        queue
+            .cancel_pending_tasks(TaskFilter::WarehouseId(warehouse_ident))
+            .await
+            .unwrap();
+
+        let task = queue.pick_new_task().await.unwrap();
+        assert!(task.is_none(), "There should be no tasks");
     }
 }

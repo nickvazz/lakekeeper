@@ -441,7 +441,7 @@ pub mod v1 {
         path = "/management/v1/role/{id}",
         params(("id" = Uuid,)),
         responses(
-            (status = 200, description = "Role deleted successfully"),
+            (status = 204, description = "Role deleted successfully"),
         )
     )]
     async fn delete_role<C: Catalog, A: Authorizer, S: SecretStore>(
@@ -451,10 +451,10 @@ pub mod v1 {
     ) -> Result<(StatusCode, ())> {
         ApiServer::<C, A, S>::delete_role(api_context, metadata, id)
             .await
-            .map(|()| (StatusCode::OK, ()))
+            .map(|()| (StatusCode::NO_CONTENT, ()))
     }
 
-    /// Get a role
+    /// Get a rolex
     #[utoipa::path(
         get,
         tag = "role",
