@@ -158,6 +158,41 @@ impl TaskQueue for TabularExpirationQueue {
         )
         .await
     }
+
+    async fn cancel_task(&self, id: Uuid, reason: &str) -> crate::api::Result<()> {
+        let mut transaction = self
+            .pg_queue
+            .read_write
+            .write_pool
+            .begin()
+            .await
+            .map_err(|e| e.into_error_model("fail".into()))?;
+
+        let task = sqlx::query!(
+            r#"UPDATE task SET status = 'cancelled'
+               WHERE task_id = $1 AND status = 'pending' RETURNING task_id"#,
+            id
+        )
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(|e| {
+            tracing::error!(?e, "failed to select task");
+            e.into_error_model("fail".into())
+        })?;
+
+        if let Some(record) = task {
+            tracing::debug!("Task cancelled: '{}'", record.task_id);
+        } else {
+            tracing::info!("Task not found or already completed");
+        }
+
+        transaction.commit().await.map_err(|e| {
+            tracing::error!(?e, "failed to commit");
+            e.into_error_model("fail".into())
+        })?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

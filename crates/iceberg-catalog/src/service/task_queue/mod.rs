@@ -100,22 +100,24 @@ pub trait TaskQueue: Debug {
     async fn pick_new_task(&self) -> crate::api::Result<Option<Self::Task>>;
     async fn record_success(&self, id: Uuid) -> crate::api::Result<()>;
     async fn record_failure(&self, id: Uuid, error_details: &str) -> crate::api::Result<()>;
+    async fn cancel_task(&self, id: Uuid, reason: &str) -> crate::api::Result<()>;
 
     async fn retrying_record_success(&self, task: &Task) {
-        self.retrying_record_success_or_failure(task, SuccessOrFailure::Success)
+        self.retrying_record_success_or_failure(task, Status::Success)
             .await;
     }
 
     async fn retrying_record_failure(&self, task: &Task, details: &str) {
-        self.retrying_record_success_or_failure(task, SuccessOrFailure::Failure(details))
+        self.retrying_record_success_or_failure(task, Status::Failure(details))
             .await;
     }
 
-    async fn retrying_record_success_or_failure(&self, task: &Task, result: SuccessOrFailure<'_>) {
+    async fn retrying_record_success_or_failure(&self, task: &Task, result: Status<'_>) {
         let mut retry = 0;
         while let Err(e) = match result {
-            SuccessOrFailure::Success => self.record_success(task.task_id).await,
-            SuccessOrFailure::Failure(details) => self.record_failure(task.task_id, details).await,
+            Status::Success => self.record_success(task.task_id).await,
+            Status::Failure(details) => self.record_failure(task.task_id, details).await,
+            Status::Cancelled(details) => self.cancel_task(task.task_id, details).await,
         } {
             tracing::error!("Failed to record {}: {:?}", result.as_str(), e);
             tokio::time::sleep(Duration::from_secs(1 + retry)).await;
@@ -150,20 +152,23 @@ pub enum TaskStatus {
     Finished,
     Running,
     Failed,
+    Cancelled,
 }
 
 #[derive(Debug)]
-pub enum SuccessOrFailure<'a> {
+pub enum Status<'a> {
     Success,
     Failure(&'a str),
+    Cancelled(&'a str),
 }
 
-impl<'a> SuccessOrFailure<'a> {
+impl<'a> Status<'a> {
     #[must_use]
     pub fn as_str(&self) -> &str {
         match self {
-            SuccessOrFailure::Success => "success",
-            SuccessOrFailure::Failure(_) => "failure",
+            Status::Success => "success",
+            Status::Failure(_) => "failure",
+            Status::Cancelled(reason) => &format!("cancelled-{reason}"),
         }
     }
 }
