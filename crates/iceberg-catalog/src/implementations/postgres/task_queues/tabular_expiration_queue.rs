@@ -169,7 +169,6 @@ impl TaskQueue for TabularExpirationQueue {
 #[cfg(test)]
 mod test {
     use super::super::test::setup;
-    use crate::api::management::v1::warehouse;
     use crate::service::task_queue::tabular_expiration_queue::TabularExpirationInput;
     use crate::service::task_queue::{TaskFilter, TaskQueue, TaskQueueConfig};
     use crate::WarehouseIdent;

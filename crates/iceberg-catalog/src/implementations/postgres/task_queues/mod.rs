@@ -206,7 +206,7 @@ macro_rules! impl_pg_task_queue {
 use impl_pg_task_queue;
 
 /// Cancel pending tasks for a warehouse
-/// If task_ids are provided which are not pending, they are ignored
+/// If `task_ids are provided in `filter` which are not pending, they are ignored
 async fn cancel_pending_tasks(
     queue: &PgQueue,
     filter: TaskFilter,
@@ -238,10 +238,9 @@ async fn cancel_pending_tasks(
                     ?e,
                     "Failed to cancel {queue_name} Tasks for warehouse {warehouse_id}"
                 );
-                e.into_error_model(
-                    format!("Failed to cancel {queue_name} Tasks for warehouse {warehouse_id}")
-                        .into(),
-                )
+                e.into_error_model(format!(
+                    "Failed to cancel {queue_name} Tasks for warehouse {warehouse_id}"
+                ))
             })?;
         }
         TaskFilter::TaskIds(task_ids) => {
