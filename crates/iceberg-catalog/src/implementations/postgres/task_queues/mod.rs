@@ -206,7 +206,7 @@ macro_rules! impl_pg_task_queue {
 use impl_pg_task_queue;
 
 /// Cancel pending tasks for a warehouse
-/// If `task_ids are provided in `filter` which are not pending, they are ignored
+/// If `task_ids` are provided in `filter` which are not pending, they are ignored
 async fn cancel_pending_tasks(
     queue: &PgQueue,
     filter: TaskFilter,
