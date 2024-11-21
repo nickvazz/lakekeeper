@@ -457,7 +457,7 @@ pub mod v1 {
             .map(|()| (StatusCode::NO_CONTENT, ()))
     }
 
-    /// Get a rolex
+    /// Get a role
     #[utoipa::path(
         get,
         tag = "role",
