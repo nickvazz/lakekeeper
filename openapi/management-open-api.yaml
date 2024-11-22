@@ -2751,6 +2751,34 @@ components:
             - soft
       discriminator:
         propertyName: type
+    TabularIdentUuid:
+      oneOf:
+      - type: object
+        required:
+        - type
+        - id
+        properties:
+          id:
+            type: string
+            format: uuid
+          type:
+            type: string
+            enum:
+            - Table
+      - type: object
+        required:
+        - type
+        - id
+        properties:
+          id:
+            type: string
+            format: uuid
+          type:
+            type: string
+            enum:
+            - View
+      discriminator:
+        propertyName: type
     TabularType:
       type: string
       description: Type of tabular
