@@ -23,7 +23,7 @@ use crate::service::{
 };
 use crate::{ProjectIdent, WarehouseIdent, DEFAULT_PROJECT_ID};
 use iceberg_ext::catalog::rest::ErrorModel;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use utoipa::ToSchema;
 
 #[derive(Debug, Deserialize, utoipa::IntoParams)]
@@ -218,14 +218,14 @@ impl axum::response::IntoResponse for CreateWarehouseResponse {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Deserialize, Debug, ToSchema)]
 #[serde(rename_all = "kebab-case", untagged)]
 pub enum Undroppable {
     Tabulars { tabulars: Vec<TabularIdentUuid> },
     Namespace { namespace: uuid::Uuid },
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, ToSchema)]
 #[serde(rename_all = "kebab-case")]
 pub struct UndeleteTabularsRequest {
     /// Tabular ID

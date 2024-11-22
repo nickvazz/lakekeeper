@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE tabular t\n        SET deleted_at = NULL\n        WHERE t.tabular_id = any($1)\n        RETURNING (select te.task_id from tabular_expirations te join tabular on te.tabular_id = t.tabular_id) as \"task_id\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "task_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "ac31fbfacb6efc88950d4c6e5abaa8d6b4e93dfcda6d7b005edfd1957b2c9fae"
+}
