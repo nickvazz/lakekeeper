@@ -1,3 +1,5 @@
+import json
+
 import conftest
 import pandas as pd
 import pytest
@@ -358,6 +360,9 @@ def test_undrop_table_purge_http(spark, warehouse: conftest.Warehouse, storage_c
         ]
     ))
 
+    print(json.dumps({
+        "undrop": {"tabulars": [{"type": "table", "id": str(table_0.metadata.table_uuid)}]}
+    }))
     resp = requests.post(undrop_uri, json={
         "undrop": {"tabulars": [{"type": "table", "id": str(table_0.metadata.table_uuid)}]}
     }, headers={"Authorization": f"Bearer {warehouse.access_token}"})

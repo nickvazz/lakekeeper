@@ -21,7 +21,6 @@ use sqlx::{Arguments, Execute, FromRow, Postgres, QueryBuilder};
 use std::collections::{HashMap, HashSet};
 use std::default::Default;
 use std::fmt::Debug;
-use uuid::Uuid;
 
 const MAX_PARAMETERS: usize = 30000;
 
@@ -582,46 +581,59 @@ impl From<TabularType> for crate::api::management::v1::TabularType {
 }
 
 pub(crate) async fn clear_tabular_deleted_at(
-    tabular_id: &[Uuid],
+    tabular_ids: &[Uuid],
     transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
 ) -> Result<Vec<TaskId>> {
-    let task_id = sqlx::query!(
+    let deleted = sqlx::query!(
         r#"
         UPDATE tabular t
         SET deleted_at = NULL
         WHERE t.tabular_id = any($1)
-        RETURNING (select te.task_id from tabular_expirations te join tabular on te.tabular_id = t.tabular_id) as "task_id"
         "#,
-        tabular_id
+        tabular_ids
     )
-    .fetch_all(&mut **transaction)
+    .execute(&mut **transaction)
     .await
     .map_err(|e| {
-            tracing::warn!("Error marking tabular as undeleted: {}", e);
-            e.into_error_model("Error marking tabular as undeleted")
+        tracing::warn!("Error marking tabular as undeleted: {}", e);
+        e.into_error_model("Error marking tabular as undeleted")
     })?;
-    if task_id.len() != tabular_id.len() {
+    if deleted.rows_affected() != tabular_ids.len() as u64 {
         return Err(ErrorModel::internal(
-            "Mismatch between deleted_at entries in tabular and amount of expiration tasks.",
+            "Mismatch between deleted_at entries in tabular to-be-deleted tabulars.",
             "InternalDatabaseError",
             None,
         )
         .into());
     }
 
-    task_id
+    let task_id = sqlx::query!(
+        r#"
+        SELECT task_id FROM tabular_expirations
+        WHERE tabular_id = any($1)
+        "#,
+        tabular_ids
+    )
+    .fetch_all(&mut **transaction)
+    .await
+    .map_err(|e| {
+        tracing::warn!("Error fetching task IDs for tabulars: {}", e);
+        e.into_error_model("Error fetching task IDs for tabulars")
+    })?;
+
+    if task_id.len() != tabular_ids.len() {
+        return Err(ErrorModel::internal(
+            "Mismatch between task IDs in tabular_expirations and to-be-deleted tabulars.",
+            "InternalDatabaseError",
+            None,
+        )
+        .into());
+    }
+
+    Ok(task_id
         .into_iter()
-        .map(|task_id| {
-            task_id.task_id.map(TaskId::from).ok_or(
-                ErrorModel::internal(
-                    "Task ID missing after clearing deleted_at",
-                    "InternalDatabaseError",
-                    None,
-                )
-                .into(),
-            )
-        })
-        .collect::<Result<Vec<TaskId>>>()
+        .map(|task_id| TaskId::from(task_id.task_id))
+        .collect::<Vec<TaskId>>())
 }
 
 pub(crate) async fn mark_tabular_as_deleted(
