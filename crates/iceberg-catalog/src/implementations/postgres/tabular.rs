@@ -21,6 +21,7 @@ use sqlx::{Arguments, Execute, FromRow, Postgres, QueryBuilder};
 use std::collections::{HashMap, HashSet};
 use std::default::Default;
 use std::fmt::Debug;
+use uuid::Uuid;
 
 const MAX_PARAMETERS: usize = 30000;
 
