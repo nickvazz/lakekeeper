@@ -4,7 +4,7 @@ info:
   description: Lakekeeper is a rust-native Apache Iceberg REST Catalog implementation. The Management API provides endpoints to manage users, roles, projects, and warehouses.
   license:
     name: Apache-2.0
-  version: 0.4.4
+  version: 0.4.3
 servers:
 - url: '{scheme}://{host}/{basePath}'
   description: Lakekeeper Management API
@@ -1342,6 +1342,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListDeletedTabularsResponse'
+  /management/v1/warehouse/{warehouse_id}/deleted_tabulars/undrop:
+    post:
+      tags:
+      - warehouse
+      operationId: undrop_tabulars
+      parameters:
+      - name: warehouse_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        description: ''
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UndeleteTabularsRequest'
+        required: true
+      responses:
+        '204':
+          description: Tabular undropped successfully
   /management/v1/warehouse/{warehouse_id}/rename:
     post:
       tags:
@@ -2735,6 +2757,30 @@ components:
       enum:
       - table
       - view
+    UndeleteTabularsRequest:
+      type: object
+      required:
+      - undrop
+      properties:
+        undrop:
+          $ref: '#/components/schemas/Undroppable'
+    Undroppable:
+      oneOf:
+      - type: object
+        required:
+        - tabulars
+        properties:
+          tabulars:
+            type: array
+            items:
+              $ref: '#/components/schemas/TabularIdentUuid'
+      - type: object
+        required:
+        - namespace
+        properties:
+          namespace:
+            type: string
+            format: uuid
     UpdateNamespaceAssignmentsRequest:
       type: object
       properties:
@@ -3149,6 +3195,4 @@ tags:
   description: Manage Roles
 - name: permissions
   description: Manage Permissions
-
-
 
