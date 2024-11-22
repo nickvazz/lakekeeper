@@ -22,6 +22,7 @@ use iceberg_ext::catalog::rest::{CatalogConfig, ErrorModel};
 pub use iceberg_ext::catalog::rest::{CommitTableResponse, CreateTableRequest};
 use iceberg_ext::configs::Location;
 
+use crate::service::task_queue::TaskId;
 use std::collections::{HashMap, HashSet};
 
 #[async_trait::async_trait]
@@ -368,6 +369,15 @@ where
         transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'a>,
     ) -> Result<String>;
 
+    /// Undrop a table.
+    ///
+    /// Undrops a soft-deleted table. Does not work if the table was hard-deleted.
+    /// Returns the task id of the expiration task associated with the soft-deletion.
+    async fn undrop_tabular(
+        table_id: &[TableIdentUuid],
+        transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'_>,
+    ) -> Result<Vec<TaskId>>;
+
     async fn mark_tabular_as_deleted(
         table_id: TabularIdentUuid,
         transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'_>,
@@ -622,7 +632,7 @@ where
         warehouse_id: WarehouseIdent,
         namespace_id: Option<NamespaceIdentUuid>, // Filter by namespace
         list_flags: ListFlags,
-        catalog_state: Self::State,
+        transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'_>,
         pagination_query: PaginationQuery,
     ) -> Result<PaginatedMapping<TabularIdentUuid, (TabularIdentOwned, Option<DeletionDetails>)>>;
 }

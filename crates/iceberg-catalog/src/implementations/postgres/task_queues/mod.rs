@@ -85,7 +85,7 @@ async fn queue_task(
     )
     .fetch_optional(conn)
     .await
-    .map_err(|e| e.into_error_model("fail".into()))?)
+    .map_err(|e| e.into_error_model("failed queueing task"))?)
 }
 
 async fn record_failure(
@@ -111,7 +111,7 @@ async fn record_failure(
         details
     )
         .execute(conn)
-        .await.map_err(|e| e.into_error_model("fail".into()))?;
+        .await.map_err(|e| e.into_error_model("failed to record task failure"))?;
     Ok(())
 }
 
@@ -166,7 +166,7 @@ async fn record_success(id: Uuid, pool: &PgPool) -> Result<(), IcebergErrorRespo
     )
     .execute(pool)
     .await
-    .map_err(|e| e.into_error_model("fail".into()))?;
+    .map_err(|e| e.into_error_model("failed to record task success"))?;
     Ok(())
 }
 
@@ -217,7 +217,7 @@ async fn cancel_pending_tasks(
         .write_pool
         .begin()
         .await
-        .map_err(|e| e.into_error_model("Failed to get transaction to cancel Task".into()))?;
+        .map_err(|e| e.into_error_model("Failed to get transaction to cancel Task"))?;
 
     match filter {
         TaskFilter::WarehouseId(warehouse_id) => {
@@ -250,20 +250,20 @@ async fn cancel_pending_tasks(
                     WHERE status = 'pending'
                     AND task_id = ANY($1)
                 "#,
-                &task_ids,
+                &task_ids.iter().map(|s| **s).collect::<Vec<_>>(),
             )
             .fetch_all(&mut *transaction)
             .await
             .map_err(|e| {
                 tracing::error!(?e, "Failed to cancel Tasks for task_ids {task_ids:?}");
-                e.into_error_model("Failed to cancel Tasks for specified ids".into())
+                e.into_error_model("Failed to cancel Tasks for specified ids")
             })?;
         }
     }
 
     transaction.commit().await.map_err(|e| {
         tracing::error!(?e, "Failed to commit transaction to cancel Tasks");
-        e.into_error_model("fail".into())
+        e.into_error_model("failed to commit transaction cancelling tasks.")
     })?;
 
     Ok(())

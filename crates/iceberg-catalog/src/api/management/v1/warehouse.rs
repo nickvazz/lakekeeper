@@ -10,11 +10,12 @@ use futures::FutureExt;
 use itertools::Itertools;
 
 use crate::api::iceberg::v1::{PageToken, PaginationQuery};
-use crate::service::NamespaceIdentUuid;
+use crate::service::{NamespaceIdentUuid, TableIdentUuid};
 
 use super::default_page_size;
 use crate::api::management::v1::role::require_project_id;
 use crate::catalog::PageStatus;
+use crate::service::task_queue::TaskFilter;
 pub use crate::service::WarehouseStatus;
 use crate::service::{
     authz::Authorizer, secrets::SecretStore, Catalog, ListFlags, State, TabularIdentUuid,
@@ -215,6 +216,20 @@ impl axum::response::IntoResponse for CreateWarehouseResponse {
     fn into_response(self) -> axum::http::Response<axum::body::Body> {
         (http::StatusCode::CREATED, axum::Json(self)).into_response()
     }
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+pub enum Undroppable {
+    Tabulars(Vec<TabularIdentUuid>),
+    Namespace(uuid::Uuid),
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "kebab-case")]
+pub struct UndeleteTabularsRequest {
+    /// Tabular ID
+    pub undrop: Undroppable,
 }
 
 impl<C: Catalog, A: Authorizer + Clone, S: SecretStore> Service<C, A, S> for ApiServer<C, A, S> {}
@@ -642,6 +657,108 @@ pub trait Service<C: Catalog, A: Authorizer, S: SecretStore> {
         Ok(())
     }
 
+    async fn undrop_tabulars(
+        request_metadata: RequestMetadata,
+        warehouse_ident: WarehouseIdent,
+        request: UndeleteTabularsRequest,
+        context: ApiContext<State<A, C, S>>,
+    ) -> Result<()> {
+        // ------------------- AuthZ -------------------
+        let catalog = context.v1_state.catalog;
+        let authorizer = context.v1_state.authz;
+        // TODO: authz
+        let mut futs = vec![];
+        match &request.undrop {
+            Undroppable::Tabulars(tabs) => {
+                for t in tabs {
+                    match t {
+                        TabularIdentUuid::View(id) => {
+                            futs.push(authorizer.is_allowed_view_action(
+                                &request_metadata,
+                                warehouse_ident,
+                                (*id).into(),
+                                &crate::service::authz::CatalogViewAction::CanUndrop,
+                            ));
+                        }
+                        TabularIdentUuid::Table(id) => {
+                            futs.push(authorizer.is_allowed_table_action(
+                                &request_metadata,
+                                warehouse_ident,
+                                (*id).into(),
+                                &crate::service::authz::CatalogTableAction::CanUndrop,
+                            ));
+                        }
+                    }
+                }
+            }
+            Undroppable::Namespace(ns) => {
+                let false = authorizer
+                    .is_allowed_namespace_action(
+                        &request_metadata,
+                        warehouse_ident,
+                        (*ns).into(),
+                        &crate::service::authz::CatalogNamespaceAction::CanUndropAll,
+                    )
+                    .await?
+                else {
+                    return Err(ErrorModel::forbidden(
+                        "Not allowed to undrop all tabulars in the specified namespace.",
+                        "NotAuthorized",
+                        None,
+                    )
+                    .into());
+                };
+            }
+        }
+        if !futures::future::try_join_all(futs)
+            .await?
+            .into_iter()
+            .all(|t| t)
+        {
+            return Err(ErrorModel::forbidden(
+                "Not allowed to undrop at least one specified tabular.",
+                "NotAuthorized",
+                None,
+            )
+            .into());
+        }
+
+        // ------------------- Business Logic -------------------
+        let mut transaction = C::Transaction::begin_write(catalog.clone()).await?;
+        let tabs = match request.undrop {
+            Undroppable::Tabulars(tabs) => {
+                tabs.into_iter().map(|i| TableIdentUuid::from(*i)).collect()
+            }
+            Undroppable::Namespace(ns) =>
+            // TODO: do we want to paginate here?
+            {
+                C::list_tabulars(
+                    warehouse_ident,
+                    Some(ns.into()),
+                    ListFlags::only_deleted(),
+                    transaction.transaction(),
+                    PaginationQuery {
+                        page_token: PageToken::NotSpecified,
+                        page_size: Some(1000),
+                    },
+                )
+                .await?
+                .into_iter()
+                .map(|t| TableIdentUuid::from(*t.0))
+                .collect_vec()
+            }
+        };
+        let task_id = C::undrop_tabular(&tabs, transaction.transaction()).await?;
+        context
+            .v1_state
+            .queues
+            .cancel_tabular_expiration(TaskFilter::TaskIds(task_id))
+            .await?;
+        transaction.commit().await?;
+
+        Ok(())
+    }
+
     #[allow(clippy::too_many_lines)]
     async fn list_soft_deleted_tabulars(
         request_metadata: RequestMetadata,
@@ -668,8 +785,7 @@ pub trait Service<C: Catalog, A: Authorizer, S: SecretStore> {
             crate::catalog::fetch_until_full_page::<_, _, _, C>(
                 pagination_query.page_size,
                 pagination_query.page_token,
-                |page_size, page_token, _| {
-                    let catalog = catalog.clone();
+                |page_size, page_token, t| {
                     let authorizer = authorizer.clone();
                     let request_metadata = request_metadata.clone();
                     async move {
@@ -682,7 +798,7 @@ pub trait Service<C: Catalog, A: Authorizer, S: SecretStore> {
                             warehouse_id,
                             namespace_id,
                             ListFlags::only_deleted(),
-                            catalog,
+                            t.transaction(),
                             query,
                         )
                         .await?;

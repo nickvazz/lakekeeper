@@ -6,6 +6,7 @@ use chrono::Utc;
 use serde::{Deserialize, Deserializer, Serialize};
 use sqlx::FromRow;
 use std::fmt::Debug;
+use std::ops::Deref;
 use std::str::FromStr;
 use std::time::Duration;
 use uuid::Uuid;
@@ -40,6 +41,14 @@ impl TaskQueues {
         task: TabularExpirationInput,
     ) -> crate::api::Result<()> {
         self.tabular_expiration.enqueue(task).await
+    }
+
+    #[tracing::instrument(skip(self))]
+    pub(crate) async fn cancel_tabular_expiration(
+        &self,
+        filter: TaskFilter,
+    ) -> crate::api::Result<()> {
+        self.tabular_expiration.cancel_pending_tasks(filter).await
     }
 
     #[tracing::instrument(skip(self))]
@@ -89,11 +98,34 @@ impl TaskQueues {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct TaskId(Uuid);
+
+impl From<Uuid> for TaskId {
+    fn from(id: Uuid) -> Self {
+        Self(id)
+    }
+}
+
+impl From<TaskId> for Uuid {
+    fn from(id: TaskId) -> Self {
+        id.0
+    }
+}
+
+impl Deref for TaskId {
+    type Target = Uuid;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 /// A filter to select tasks
 #[derive(Debug, Clone, PartialEq)]
 pub enum TaskFilter {
     WarehouseId(WarehouseIdent),
-    TaskIds(Vec<Uuid>),
+    TaskIds(Vec<TaskId>),
 }
 
 #[async_trait]
@@ -125,10 +157,6 @@ pub trait TaskQueue: Debug {
         while let Err(e) = match result {
             Status::Success => self.record_success(task.task_id).await,
             Status::Failure(details) => self.record_failure(task.task_id, details).await,
-            Status::Cancelled(_) => {
-                self.cancel_pending_tasks(TaskFilter::TaskIds(vec![task.task_id]))
-                    .await
-            }
         } {
             tracing::error!("Failed to record {}: {:?}", result, e);
             tokio::time::sleep(Duration::from_secs(1 + retry)).await;
@@ -170,7 +198,6 @@ pub enum TaskStatus {
 pub enum Status<'a> {
     Success,
     Failure(&'a str),
-    Cancelled(&'a str),
 }
 
 impl<'a> std::fmt::Display for Status<'a> {
@@ -178,7 +205,6 @@ impl<'a> std::fmt::Display for Status<'a> {
         match self {
             Status::Success => write!(f, "success"),
             Status::Failure(details) => write!(f, "failure ({details})"),
-            Status::Cancelled(reason) => write!(f, "cancelled ({reason})"),
         }
     }
 }

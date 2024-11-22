@@ -1,11 +1,13 @@
 use iceberg::TableIdent;
+use serde::Deserialize;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use uuid::Uuid;
 
 use super::{TableIdentUuid, ViewIdentUuid};
 
-#[derive(Hash, PartialOrd, PartialEq, Debug, Clone, Copy, Eq)]
+#[derive(Hash, PartialOrd, PartialEq, Debug, Clone, Copy, Eq, Deserialize)]
+#[serde(tag = "type", content = "id")]
 pub enum TabularIdentUuid {
     Table(Uuid),
     View(Uuid),

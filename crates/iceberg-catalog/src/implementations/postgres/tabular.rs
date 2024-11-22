@@ -12,6 +12,7 @@ use iceberg_ext::NamespaceIdent;
 use crate::api::iceberg::v1::{PaginatedMapping, PaginationQuery, MAX_PAGE_SIZE};
 
 use crate::implementations::postgres::pagination::{PaginateToken, V1PaginateToken};
+use crate::service::task_queue::TaskId;
 use crate::service::DeletionDetails;
 use crate::service::{TabularIdentBorrowed, TabularIdentOwned, TabularIdentUuid};
 use iceberg_ext::configs::Location;
@@ -578,6 +579,49 @@ impl From<TabularType> for crate::api::management::v1::TabularType {
             TabularType::View => crate::api::management::v1::TabularType::View,
         }
     }
+}
+
+pub(crate) async fn clear_tabular_deleted_at(
+    tabular_id: &[Uuid],
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+) -> Result<Vec<TaskId>> {
+    let task_id = sqlx::query!(
+        r#"
+        UPDATE tabular t
+        SET deleted_at = NULL
+        WHERE t.tabular_id = any($1)
+        RETURNING (select te.task_id from tabular_expirations te join tabular on te.tabular_id = t.tabular_id) as "task_id"
+        "#,
+        tabular_id
+    )
+    .fetch_all(&mut **transaction)
+    .await
+    .map_err(|e| {
+            tracing::warn!("Error marking tabular as undeleted: {}", e);
+            e.into_error_model("Error marking tabular as undeleted")
+    })?;
+    if task_id.len() != tabular_id.len() {
+        return Err(ErrorModel::internal(
+            "Mismatch between deleted_at entries in tabular and amount of expiration tasks.",
+            "InternalDatabaseError",
+            None,
+        )
+        .into());
+    }
+
+    task_id
+        .into_iter()
+        .map(|task_id| {
+            task_id.task_id.map(TaskId::from).ok_or(
+                ErrorModel::internal(
+                    "Task ID missing after clearing deleted_at",
+                    "InternalDatabaseError",
+                    None,
+                )
+                .into(),
+            )
+        })
+        .collect::<Result<Vec<TaskId>>>()
 }
 
 pub(crate) async fn mark_tabular_as_deleted(

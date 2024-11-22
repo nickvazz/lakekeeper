@@ -14,6 +14,7 @@ pub mod v1 {
     use std::marker::PhantomData;
 
     use crate::api::management::v1::user::{ListUsersQuery, ListUsersResponse};
+    use crate::api::management::v1::warehouse::UndeleteTabularsRequest;
     use crate::service::{
         authz::Authorizer, storage::S3Flavor, Actor, Catalog, CreateOrUpdateUserResponse, RoleId,
         SecretStore, State, TabularIdentUuid, UserId,
@@ -872,6 +873,24 @@ pub mod v1 {
         .map(Json)
     }
 
+    #[utoipa::path(
+        post,
+        tag = "warehouse",
+        path = "/management/v1/warehouse/{warehouse_id}/deleted_tabulars/undrop",
+        responses(
+            (status = 200, description = "Tabular undropped successfully")
+        )
+    )]
+    async fn undrop_tabulars<C: Catalog, A: Authorizer + Clone, S: SecretStore>(
+        Path(warehouse_id): Path<uuid::Uuid>,
+        AxumState(api_context): AxumState<ApiContext<State<A, C, S>>>,
+        Extension(metadata): Extension<RequestMetadata>,
+        Json(request): Json<UndeleteTabularsRequest>,
+    ) -> Result<()> {
+        ApiServer::<C, A, S>::undrop_tabulars(metadata, warehouse_id.into(), request, api_context)
+            .await
+    }
+
     #[derive(Debug, Serialize, utoipa::ToSchema)]
     pub struct ListDeletedTabularsResponse {
         /// List of tabulars
@@ -1004,6 +1023,10 @@ pub mod v1 {
                 .route(
                     "/warehouse/:warehouse_id/deleted_tabulars",
                     get(list_deleted_tabulars),
+                )
+                .route(
+                    "/warehouse/:warehouse_id/deleted_tabulars/undrop",
+                    post(undrop_tabulars),
                 )
                 .route(
                     "/warehouse/:warehouse_id/delete-profile",

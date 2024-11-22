@@ -479,7 +479,7 @@ pub(crate) async fn drop_table<'a>(
             )
         } else {
             tracing::warn!("Error dropping table: {}", e);
-            e.into_error_model("Error dropping table".into())
+            e.into_error_model("Error dropping table")
         }
     })?;
 

@@ -46,7 +46,7 @@ impl TaskQueue for TabularExpirationQueue {
             .write_pool
             .begin()
             .await
-            .map_err(|e| e.into_error_model("fail".into()))?;
+            .map_err(|e| e.into_error_model("failed to begin transaction for expiration queue"))?;
 
         tracing::info!(
             "Queuing expiration for '{tabular_id}' of type: '{}' under warehouse: '{warehouse_ident}'",
@@ -68,7 +68,7 @@ impl TaskQueue for TabularExpirationQueue {
             tracing::debug!("Task already exists");
             transaction.commit().await.map_err(|e| {
                 tracing::error!(?e, "failed to commit");
-                e.into_error_model("fail".into())
+                e.into_error_model("failed to commit transaction enqueuing task")
             })?;
             return Ok(());
         };
@@ -91,7 +91,7 @@ impl TaskQueue for TabularExpirationQueue {
             .await
             .map_err(|e| {
                 tracing::error!(?e, "failed to insert into tabular_expirations");
-                e.into_error_model("fail".into()) })?;
+                e.into_error_model("failed to insert into tabular expirations") })?;
 
         if let Some(row) = it {
             tracing::debug!("Queued expiration task: {:?}", row.task_id);
@@ -101,7 +101,7 @@ impl TaskQueue for TabularExpirationQueue {
 
         transaction.commit().await.map_err(|e| {
             tracing::error!(?e, "failed to commit");
-            e.into_error_model("fail".into())
+            e.into_error_model("failed to commit transaction inserting tabular expiration task")
         })?;
 
         Ok(())
@@ -134,7 +134,7 @@ impl TaskQueue for TabularExpirationQueue {
             .map_err(|e| {
                 tracing::error!(?e, "error selecting tabular expiration");
                 // TODO: should we reset task status here?
-                e.into_error_model("failed to read task after picking one up".into())
+                e.into_error_model("failed to read task after picking one up")
             })?;
 
         tracing::info!("Expiration task: {:?}", expiration);
