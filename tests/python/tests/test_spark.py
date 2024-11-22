@@ -358,7 +358,7 @@ def test_undrop_table_purge_http(spark, warehouse: conftest.Warehouse, storage_c
         ]
     ))
     requests.post(undrop_uri, json={
-        "undrop": {"tabulars": [{"table": table_0.metadata.table_uuid}]}
+        "undrop": {"tabulars": [{"table": str(table_0.metadata.table_uuid)}]}
     }, headers={"Authorization": f"Bearer {warehouse.access_token}"})
 
     time.sleep(5)
