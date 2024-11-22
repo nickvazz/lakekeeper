@@ -2764,7 +2764,7 @@ components:
           type:
             type: string
             enum:
-            - Table
+            - table
       - type: object
         required:
         - type
@@ -2776,7 +2776,7 @@ components:
           type:
             type: string
             enum:
-            - View
+            - view
       discriminator:
         propertyName: type
     TabularType:

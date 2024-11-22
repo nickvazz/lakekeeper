@@ -372,7 +372,7 @@ def test_undrop_table_purge_http(spark, warehouse: conftest.Warehouse, storage_c
     tables = warehouse.pyiceberg_catalog.list_tables(namespace)
 
     assert len(tables) == 2
-    for n, ((_, table), df) in enumerate(zip(sorted(tables), dfs[1:]), 1):
+    for n, ((_, table), df) in enumerate(zip(sorted(tables), dfs)):
         assert table == f"my_table_{n}"
         table = warehouse.pyiceberg_catalog.load_table((namespace, table))
         assert table.scan().to_pandas().equals(df)
