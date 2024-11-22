@@ -344,7 +344,7 @@ def test_undrop_table_purge_http(spark, warehouse: conftest.Warehouse, storage_c
     ).raise_for_status()
     with pytest.raises(Exception) as e:
         warehouse.pyiceberg_catalog.load_table((namespace, "my_table_0"))
-    # /management/v1/warehouse/{warehouse_id}/deleted_tabulars/undrop
+
     undrop_uri = (
             warehouse.server.management_url.strip("/")
             + "/"
@@ -357,10 +357,11 @@ def test_undrop_table_purge_http(spark, warehouse: conftest.Warehouse, storage_c
             "undrop",
         ]
     ))
-    requests.post(undrop_uri, json={
-        "undrop": {"tabulars": [{"table": str(table_0.metadata.table_uuid)}]}
-    }, headers={"Authorization": f"Bearer {warehouse.access_token}"})
 
+    resp = requests.post(undrop_uri, json={
+        "undrop": {"tabulars": [{"type": "table", "id": str(table_0.metadata.table_uuid)}]}
+    }, headers={"Authorization": f"Bearer {warehouse.access_token}"})
+    resp.raise_for_status()
     time.sleep(5)
 
     tables = warehouse.pyiceberg_catalog.list_tables(namespace)
