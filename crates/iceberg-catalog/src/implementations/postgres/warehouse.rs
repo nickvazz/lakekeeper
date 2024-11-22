@@ -260,10 +260,14 @@ pub(crate) async fn delete_project<'a>(
     Ok(())
 }
 
-pub(crate) async fn list_warehouses(
+pub(crate) async fn list_warehouses<
+    'e,
+    'c: 'e,
+    E: sqlx::Executor<'c, Database = sqlx::Postgres>,
+>(
     project_id: ProjectIdent,
     include_status: Option<Vec<WarehouseStatus>>,
-    catalog_state: CatalogState,
+    catalog_state: E,
 ) -> Result<Vec<GetWarehouseResponse>> {
     #[derive(sqlx::FromRow, Debug, PartialEq)]
     struct WarehouseRecord {
@@ -295,7 +299,7 @@ pub(crate) async fn list_warehouses(
         *project_id,
         include_status as Vec<WarehouseStatus>
     )
-    .fetch_all(&catalog_state.read_pool())
+    .fetch_all(catalog_state)
     .await
     .map_err(|e| e.into_error_model("Error fetching warehouses"))?;
 
@@ -383,9 +387,9 @@ pub(crate) async fn get_warehouse<'a>(
     }
 }
 
-pub(crate) async fn list_projects(
+pub(crate) async fn list_projects<'e, 'c: 'e, E: sqlx::Executor<'c, Database = sqlx::Postgres>>(
     project_ids: Option<HashSet<ProjectIdent>>,
-    catalog_state: CatalogState,
+    connection: E,
 ) -> Result<Vec<GetProjectResponse>> {
     let return_all = project_ids.is_none();
     let projects = sqlx::query!(
@@ -397,7 +401,7 @@ pub(crate) async fn list_projects(
             .unwrap_or_default() as Vec<uuid::Uuid>,
         return_all
     )
-    .fetch_all(&catalog_state.read_pool())
+    .fetch_all(connection)
     .await
     .map_err(|e| e.into_error_model("Error fetching projects"))?;
 
@@ -558,7 +562,7 @@ pub(crate) mod test {
     use super::*;
     use crate::implementations::postgres::PostgresCatalog;
     use crate::service::storage::S3Flavor;
-    use crate::service::Catalog as _;
+    use crate::service::{Catalog as _, Transaction};
     use crate::{
         implementations::postgres::PostgresTransaction,
         service::{storage::S3Profile, Transaction as _},
@@ -638,40 +642,53 @@ pub(crate) mod test {
     #[sqlx::test]
     async fn test_list_projects(pool: sqlx::PgPool) {
         let state = CatalogState::from_pools(pool.clone(), pool.clone());
+
         let project_id_1 = ProjectIdent::from(uuid::Uuid::new_v4());
         initialize_warehouse(state.clone(), None, Some(&project_id_1), None, true).await;
 
-        let projects = PostgresCatalog::list_projects(None, state.clone())
+        let mut trx = PostgresTransaction::begin_read(state.clone())
+            .await
+            .unwrap();
+
+        let projects = PostgresCatalog::list_projects(None, trx.transaction())
             .await
             .unwrap()
             .into_iter()
             .map(|p| p.project_id)
             .collect::<Vec<_>>();
+        trx.commit().await.unwrap();
         assert_eq!(projects.len(), 1);
         assert!(projects.contains(&project_id_1));
 
         let project_id_2 = ProjectIdent::from(uuid::Uuid::new_v4());
         initialize_warehouse(state.clone(), None, Some(&project_id_2), None, true).await;
 
-        let projects = PostgresCatalog::list_projects(None, state.clone())
+        let mut trx = PostgresTransaction::begin_read(state.clone())
+            .await
+            .unwrap();
+
+        let projects = PostgresCatalog::list_projects(None, trx.transaction())
             .await
             .unwrap()
             .into_iter()
             .map(|p| p.project_id)
             .collect::<Vec<_>>();
+        trx.commit().await.unwrap();
         assert_eq!(projects.len(), 2);
         assert!(projects.contains(&project_id_1));
         assert!(projects.contains(&project_id_2));
+        let mut trx = PostgresTransaction::begin_read(state).await.unwrap();
 
         let projects = PostgresCatalog::list_projects(
             Some(HashSet::from_iter(vec![project_id_1])),
-            state.clone(),
+            trx.transaction(),
         )
         .await
         .unwrap()
         .into_iter()
         .map(|p| p.project_id)
         .collect::<Vec<_>>();
+        trx.commit().await.unwrap();
 
         assert_eq!(projects.len(), 1);
         assert!(projects.contains(&project_id_1));
@@ -683,10 +700,12 @@ pub(crate) mod test {
         let project_id = ProjectIdent::from(uuid::Uuid::new_v4());
         let warehouse_id_1 =
             initialize_warehouse(state.clone(), None, Some(&project_id), None, true).await;
+        let mut trx = PostgresTransaction::begin_read(state).await.unwrap();
 
-        let warehouses = PostgresCatalog::list_warehouses(project_id, None, state.clone())
+        let warehouses = PostgresCatalog::list_warehouses(project_id, None, trx.transaction())
             .await
             .unwrap();
+        trx.commit().await.unwrap();
         assert_eq!(warehouses.len(), 1);
         // Check ids
         assert!(warehouses.iter().any(|w| w.id == warehouse_id_1));
@@ -718,23 +737,30 @@ pub(crate) mod test {
         // Create warehouse 2
         let warehouse_id_2 =
             initialize_warehouse(state.clone(), None, Some(&project_id), None, false).await;
+        let mut trx = PostgresTransaction::begin_read(state.clone())
+            .await
+            .unwrap();
 
         // Assert active whs
         let warehouses = PostgresCatalog::list_warehouses(
             project_id,
             Some(vec![WarehouseStatus::Active, WarehouseStatus::Inactive]),
-            state.clone(),
+            trx.transaction(),
         )
         .await
         .unwrap();
+        trx.commit().await.unwrap();
         assert_eq!(warehouses.len(), 2);
         assert!(warehouses.iter().any(|w| w.id == warehouse_id_1));
         assert!(warehouses.iter().any(|w| w.id == warehouse_id_2));
 
         // Assert only active whs
-        let warehouses = PostgresCatalog::list_warehouses(project_id, None, state.clone())
+        let mut trx = PostgresTransaction::begin_read(state).await.unwrap();
+
+        let warehouses = PostgresCatalog::list_warehouses(project_id, None, trx.transaction())
             .await
             .unwrap();
+        trx.commit().await.unwrap();
         assert_eq!(warehouses.len(), 1);
         assert!(warehouses.iter().any(|w| w.id == warehouse_id_2));
     }
