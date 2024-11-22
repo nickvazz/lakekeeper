@@ -44,7 +44,7 @@ pub mod v1 {
         GcsProfile, GcsServiceKey, GetWarehouseResponse, ListDeletedTabularsQuery,
         ListWarehousesRequest, ListWarehousesResponse, RenameWarehouseRequest, S3Credential,
         S3Profile, Service as _, StorageCredential, StorageProfile, TabularDeleteProfile,
-        UpdateWarehouseCredentialRequest, UpdateWarehouseDeleteProfileRequest,
+        Undroppable, UpdateWarehouseCredentialRequest, UpdateWarehouseDeleteProfileRequest,
         UpdateWarehouseStorageRequest, WarehouseStatus,
     };
 
@@ -97,6 +97,7 @@ pub mod v1 {
             rename_warehouse,
             search_role,
             search_user,
+            undrop_tabulars,
             update_role,
             update_storage_credential,
             update_storage_profile,
@@ -147,6 +148,8 @@ pub mod v1 {
             StorageProfile,
             TabularDeleteProfile,
             TabularType,
+            UndeleteTabularsRequest,
+            Undroppable,
             UpdateRoleRequest,
             UpdateUserRequest,
             UpdateWarehouseCredentialRequest,
@@ -878,7 +881,7 @@ pub mod v1 {
         tag = "warehouse",
         path = "/management/v1/warehouse/{warehouse_id}/deleted_tabulars/undrop",
         responses(
-            (status = 200, description = "Tabular undropped successfully")
+            (status = 204, description = "Tabular undropped successfully")
         )
     )]
     async fn undrop_tabulars<C: Catalog, A: Authorizer + Clone, S: SecretStore>(

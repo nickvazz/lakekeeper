@@ -23,7 +23,7 @@ use crate::service::{
 };
 use crate::{ProjectIdent, WarehouseIdent, DEFAULT_PROJECT_ID};
 use iceberg_ext::catalog::rest::ErrorModel;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 #[derive(Debug, Deserialize, utoipa::IntoParams)]
@@ -218,11 +218,11 @@ impl axum::response::IntoResponse for CreateWarehouseResponse {
     }
 }
 
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "kebab-case", untagged)]
 pub enum Undroppable {
-    Tabulars(Vec<TabularIdentUuid>),
-    Namespace(uuid::Uuid),
+    Tabulars { tabulars: Vec<TabularIdentUuid> },
+    Namespace { namespace: uuid::Uuid },
 }
 
 #[derive(Deserialize, Debug)]
@@ -669,7 +669,7 @@ pub trait Service<C: Catalog, A: Authorizer, S: SecretStore> {
         // TODO: authz
         let mut futs = vec![];
         match &request.undrop {
-            Undroppable::Tabulars(tabs) => {
+            Undroppable::Tabulars { tabulars: tabs } => {
                 for t in tabs {
                     match t {
                         TabularIdentUuid::View(id) => {
@@ -691,7 +691,7 @@ pub trait Service<C: Catalog, A: Authorizer, S: SecretStore> {
                     }
                 }
             }
-            Undroppable::Namespace(ns) => {
+            Undroppable::Namespace { namespace: ns } => {
                 let false = authorizer
                     .is_allowed_namespace_action(
                         &request_metadata,
@@ -726,10 +726,10 @@ pub trait Service<C: Catalog, A: Authorizer, S: SecretStore> {
         // ------------------- Business Logic -------------------
         let mut transaction = C::Transaction::begin_write(catalog.clone()).await?;
         let tabs = match request.undrop {
-            Undroppable::Tabulars(tabs) => {
+            Undroppable::Tabulars { tabulars: tabs } => {
                 tabs.into_iter().map(|i| TableIdentUuid::from(*i)).collect()
             }
-            Undroppable::Namespace(ns) =>
+            Undroppable::Namespace { namespace: ns } =>
             // TODO: do we want to paginate here?
             {
                 C::list_tabulars(

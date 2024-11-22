@@ -274,6 +274,7 @@ mod test {
         use crate::api::management::v1::TabularType;
         use crate::implementations::postgres::tabular::table::tests::initialize_table;
         use crate::implementations::postgres::warehouse::test::initialize_warehouse;
+        use crate::implementations::postgres::PostgresTransaction;
         use crate::implementations::postgres::{CatalogState, PostgresCatalog};
         use crate::service::authz::AllowAllAuthorizer;
         use crate::service::storage::{
@@ -369,7 +370,9 @@ mod test {
                 Some("tab".to_string()),
             )
             .await;
-
+            let mut trx = PostgresTransaction::begin_read(catalog_state.clone())
+                .await
+                .unwrap();
             let (_, _) = <PostgresCatalog as Catalog>::list_tabulars(
                 warehouse,
                 None,
@@ -378,14 +381,14 @@ mod test {
                     include_staged: false,
                     include_deleted: true,
                 },
-                catalog_state.clone(),
+                trx.transaction(),
                 PaginationQuery::empty(),
             )
             .await
             .unwrap()
             .remove(&tab.table_id.into())
             .unwrap();
-
+            trx.commit().await.unwrap();
             let mut trx =
                 <PostgresCatalog as Catalog>::Transaction::begin_write(catalog_state.clone())
                     .await
@@ -408,6 +411,9 @@ mod test {
                 })
                 .await
                 .unwrap();
+            let mut trx = PostgresTransaction::begin_read(catalog_state.clone())
+                .await
+                .unwrap();
 
             let (_, del) = <PostgresCatalog as Catalog>::list_tabulars(
                 warehouse,
@@ -417,7 +423,7 @@ mod test {
                     include_staged: false,
                     include_deleted: true,
                 },
-                catalog_state.clone(),
+                trx.transaction(),
                 PaginationQuery::empty(),
             )
             .await
@@ -425,8 +431,12 @@ mod test {
             .remove(&tab.table_id.into())
             .unwrap();
             del.unwrap();
-
+            trx.commit().await.unwrap();
             tokio::time::sleep(std::time::Duration::from_millis(1250)).await;
+
+            let mut trx = PostgresTransaction::begin_read(catalog_state.clone())
+                .await
+                .unwrap();
 
             assert!(<PostgresCatalog as Catalog>::list_tabulars(
                 warehouse,
@@ -436,13 +446,14 @@ mod test {
                     include_staged: false,
                     include_deleted: true,
                 },
-                catalog_state,
+                trx.transaction(),
                 PaginationQuery::empty(),
             )
             .await
             .unwrap()
             .remove(&tab.table_id.into())
             .is_none());
+            trx.commit().await.unwrap();
         }
     }
 }
