@@ -148,6 +148,7 @@ pub mod v1 {
             StorageProfile,
             TabularDeleteProfile,
             TabularType,
+            TabularIdentUuid,
             UndeleteTabularsRequest,
             Undroppable,
             UpdateRoleRequest,
