@@ -22,8 +22,8 @@ use iceberg_ext::catalog::rest::{CatalogConfig, ErrorModel};
 pub use iceberg_ext::catalog::rest::{CommitTableResponse, CreateTableRequest};
 use iceberg_ext::configs::Location;
 
-use crate::service::task_queue::TaskId;
 use crate::catalog::tables::TableMetadataDiffs;
+use crate::service::task_queue::TaskId;
 use iceberg::TableUpdate;
 use std::collections::{HashMap, HashSet};
 

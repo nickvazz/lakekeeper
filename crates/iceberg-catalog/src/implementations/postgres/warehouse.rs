@@ -563,10 +563,7 @@ pub(crate) mod test {
     use crate::implementations::postgres::PostgresCatalog;
     use crate::service::storage::S3Flavor;
     use crate::service::{Catalog as _, Transaction};
-    use crate::{
-        implementations::postgres::PostgresTransaction,
-        service::{storage::S3Profile, Transaction as _},
-    };
+    use crate::{implementations::postgres::PostgresTransaction, service::storage::S3Profile};
     use http::StatusCode;
 
     pub(crate) async fn initialize_warehouse(

@@ -23,7 +23,9 @@ use crate::api::management::v1::user::{
 use crate::implementations::postgres::role::search_role;
 use crate::implementations::postgres::tabular::table::commit_table_transaction;
 use crate::implementations::postgres::tabular::table::create_table;
-use crate::implementations::postgres::tabular::{clear_tabular_deleted_at,list_tabulars, mark_tabular_as_deleted};
+use crate::implementations::postgres::tabular::{
+    clear_tabular_deleted_at, list_tabulars, mark_tabular_as_deleted,
+};
 use crate::implementations::postgres::user::{
     create_or_update_user, delete_user, list_users, search_user,
 };
