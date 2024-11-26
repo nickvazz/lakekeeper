@@ -1387,7 +1387,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UndeleteTabularsRequest'
+              $ref: '#/components/schemas/UndropTabularsRequest'
         required: true
       responses:
         '204':
