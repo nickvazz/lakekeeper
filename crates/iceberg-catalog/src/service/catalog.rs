@@ -23,8 +23,8 @@ pub use iceberg_ext::catalog::rest::{CommitTableResponse, CreateTableRequest};
 use iceberg_ext::configs::Location;
 
 use crate::catalog::tables::TableMetadataDiffs;
-use crate::service::task_queue::TaskId;
 use crate::service::authn::UserId;
+use crate::service::task_queue::TaskId;
 use iceberg::TableUpdate;
 use std::collections::{HashMap, HashSet};
 
@@ -374,7 +374,7 @@ where
     ///
     /// Undrops a soft-deleted table. Does not work if the table was hard-deleted.
     /// Returns the task id of the expiration task associated with the soft-deletion.
-    async fn undrop_tabular(
+    async fn undrop_tabulars(
         table_id: &[TableIdentUuid],
         transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'_>,
     ) -> Result<Vec<TaskId>>;

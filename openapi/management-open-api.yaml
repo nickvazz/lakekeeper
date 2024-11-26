@@ -2830,7 +2830,7 @@ components:
       enum:
       - table
       - view
-    UndeleteTabularsRequest:
+    UndropTabularsRequest:
       type: object
       required:
       - undrop

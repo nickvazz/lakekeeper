@@ -1,3 +1,5 @@
+mod undrop;
+
 use crate::api::management::v1::{ApiServer, DeletedTabularResponse, ListDeletedTabularsResponse};
 use crate::api::{ApiContext, Result};
 use crate::request_metadata::RequestMetadata;
@@ -10,7 +12,7 @@ use futures::FutureExt;
 use itertools::Itertools;
 
 use crate::api::iceberg::v1::{PageToken, PaginationQuery};
-use crate::service::{NamespaceIdentUuid, TableIdentUuid};
+use crate::service::NamespaceIdentUuid;
 
 use super::default_page_size;
 use crate::api::management::v1::role::require_project_id;
@@ -227,7 +229,7 @@ pub enum Undroppable {
 
 #[derive(Deserialize, Debug, ToSchema)]
 #[serde(rename_all = "kebab-case")]
-pub struct UndeleteTabularsRequest {
+pub struct UndropTabularsRequest {
     /// Tabular ID
     pub undrop: Undroppable,
 }
@@ -659,101 +661,33 @@ pub trait Service<C: Catalog, A: Authorizer, S: SecretStore> {
     async fn undrop_tabulars(
         request_metadata: RequestMetadata,
         warehouse_ident: WarehouseIdent,
-        request: UndeleteTabularsRequest,
+        request: UndropTabularsRequest,
         context: ApiContext<State<A, C, S>>,
     ) -> Result<()> {
         // ------------------- AuthZ -------------------
-        let catalog = context.v1_state.catalog;
-        let authorizer = context.v1_state.authz;
-        // TODO: authz
-        let mut futs = vec![];
-        match &request.undrop {
-            Undroppable::Tabulars { tabulars: tabs } => {
-                for t in tabs {
-                    match t {
-                        TabularIdentUuid::View(id) => {
-                            futs.push(authorizer.is_allowed_view_action(
-                                &request_metadata,
-                                warehouse_ident,
-                                (*id).into(),
-                                &crate::service::authz::CatalogViewAction::CanUndrop,
-                            ));
-                        }
-                        TabularIdentUuid::Table(id) => {
-                            futs.push(authorizer.is_allowed_table_action(
-                                &request_metadata,
-                                warehouse_ident,
-                                (*id).into(),
-                                &crate::service::authz::CatalogTableAction::CanUndrop,
-                            ));
-                        }
-                    }
-                }
-            }
-            Undroppable::Namespace { namespace: ns } => {
-                let false = authorizer
-                    .is_allowed_namespace_action(
-                        &request_metadata,
-                        warehouse_ident,
-                        (*ns).into(),
-                        &crate::service::authz::CatalogNamespaceAction::CanUndropAll,
-                    )
-                    .await?
-                else {
-                    return Err(ErrorModel::forbidden(
-                        "Not allowed to undrop all tabulars in the specified namespace.",
-                        "NotAuthorized",
-                        None,
-                    )
-                    .into());
-                };
-            }
-        }
-        if !futures::future::try_join_all(futs)
-            .await?
-            .into_iter()
-            .all(|t| t)
-        {
-            return Err(ErrorModel::forbidden(
-                "Not allowed to undrop at least one specified tabular.",
-                "NotAuthorized",
-                None,
-            )
-            .into());
-        }
+        undrop::require_undrop_permissions(
+            &request,
+            &context.v1_state.authz,
+            &request_metadata,
+            warehouse_ident,
+        )
+        .await?;
 
         // ------------------- Business Logic -------------------
+        let catalog = context.v1_state.catalog;
         let mut transaction = C::Transaction::begin_write(catalog.clone()).await?;
-        let tabs = match request.undrop {
-            Undroppable::Tabulars { tabulars: tabs } => {
-                tabs.into_iter().map(|i| TableIdentUuid::from(*i)).collect()
-            }
-            Undroppable::Namespace { namespace: ns } =>
-            // TODO: do we want to paginate here?
-            {
-                C::list_tabulars(
-                    warehouse_ident,
-                    Some(ns.into()),
-                    ListFlags::only_deleted(),
-                    transaction.transaction(),
-                    PaginationQuery {
-                        page_token: PageToken::NotSpecified,
-                        page_size: Some(1000),
-                    },
-                )
-                .await?
-                .into_iter()
-                .map(|t| TableIdentUuid::from(*t.0))
-                .collect_vec()
-            }
-        };
-        let task_id = C::undrop_tabular(&tabs, transaction.transaction()).await?;
+        let tabs =
+            undrop::collect_tabular_ids::<C>(warehouse_ident, request, transaction.transaction())
+                .await?;
+        let tasks_to_cancel = C::undrop_tabulars(&tabs, transaction.transaction()).await?;
         context
             .v1_state
             .queues
-            .cancel_tabular_expiration(TaskFilter::TaskIds(task_id))
+            .cancel_tabular_expiration(TaskFilter::TaskIds(tasks_to_cancel))
             .await?;
         transaction.commit().await?;
+
+        // TODO: emit event
 
         Ok(())
     }

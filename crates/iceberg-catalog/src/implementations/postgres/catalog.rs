@@ -29,8 +29,8 @@ use crate::implementations::postgres::tabular::{
 use crate::implementations::postgres::user::{
     create_or_update_user, delete_user, list_users, search_user,
 };
-use crate::service::task_queue::TaskId;
 use crate::service::authn::UserId;
+use crate::service::task_queue::TaskId;
 use crate::service::{
     storage::StorageProfile, Catalog, CreateNamespaceRequest, CreateNamespaceResponse,
     CreateOrUpdateUserResponse, CreateTableResponse, DeletionDetails, GetNamespaceResponse,
@@ -340,7 +340,7 @@ impl Catalog for super::PostgresCatalog {
         drop_table(table_id, transaction).await
     }
 
-    async fn undrop_tabular(
+    async fn undrop_tabulars(
         tabular_ids: &[TableIdentUuid],
         transaction: <Self::Transaction as Transaction<Self::State>>::Transaction<'_>,
     ) -> Result<Vec<TaskId>> {
