@@ -20,7 +20,7 @@ A basic configuration via environment variables would look something like this:
 export ICEBERG_REST__BASE_URI=http://localhost:8080
 export ICEBERG_REST__PG_DATABASE_URL_READ="postgres://postgres_user:postgres_urlencoded_password@hostname:5432/catalog_database"
 export ICEBERG_REST__PG_DATABASE_URL_WRITE="postgres://postgres_user:postgres_urlencoded_password@hostname:5432/catalog_database"
-export ICEBERG_REST__PG_ENCRYPTION_KEY="MySecretEncryptionKeyThatIBetterNotLoose"
+export ICEBERG_REST__PG_ENCRYPTION_KEY="MySecretEncryptionKeyThatIBetterNotLose"
 ```
 
 Now we need to migrate the Database:
