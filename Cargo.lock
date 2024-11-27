@@ -3094,7 +3094,7 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "urlencoding",
- "utoipa",
+ "utoipa 4.2.3",
  "utoipa-swagger-ui",
  "uuid",
  "vaultrs",
@@ -3118,7 +3118,7 @@ dependencies = [
  "tower-http 0.6.1",
  "tracing",
  "tracing-subscriber",
- "utoipa",
+ "utoipa 4.2.3",
 ]
 
 [[package]]
@@ -3724,6 +3724,12 @@ dependencies = [
  "autocfg",
  "scopeguard",
 ]
+
+[[package]]
+name = "lockfree-object-pool"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9374ef4228402d4b7e403e5838cb880d9ee663314b0a900d5a6aabf0c213552e"
 
 [[package]]
 name = "log"
@@ -5226,7 +5232,6 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "encoding_rs",
- "futures-channel",
  "futures-core",
  "futures-util",
  "h2 0.4.5",
@@ -6000,6 +6005,12 @@ dependencies = [
  "digest",
  "rand_core 0.6.4",
 ]
+
+[[package]]
+name = "simd-adler32"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d66dc143e6b11c1eddc06d5c423cfc97062865baf299914ab64caa38182078fe"
 
 [[package]]
 name = "simdutf8"
@@ -7232,7 +7243,19 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
- "utoipa-gen",
+ "utoipa-gen 4.3.0",
+]
+
+[[package]]
+name = "utoipa"
+version = "5.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "514a48569e4e21c86d0b84b5612b5e73c0b2cf09db63260134ba426d4e8ea714"
+dependencies = [
+ "indexmap 2.3.0",
+ "serde",
+ "serde_json",
+ "utoipa-gen 5.2.0",
 ]
 
 [[package]]
@@ -7251,20 +7274,30 @@ dependencies = [
 ]
 
 [[package]]
-name = "utoipa-swagger-ui"
-version = "7.1.0"
+name = "utoipa-gen"
+version = "5.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "943e0ff606c6d57d410fd5663a4d7c074ab2c5f14ab903b9514565e59fa1189e"
+checksum = "5629efe65599d0ccd5d493688cbf6e03aa7c1da07fe59ff97cf5977ed0637f66"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.87",
+]
+
+[[package]]
+name = "utoipa-swagger-ui"
+version = "8.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5c80b4dd79ea382e8374d67dcce22b5c6663fa13a82ad3886441d1bbede5e35"
 dependencies = [
  "axum",
  "mime_guess",
  "regex",
- "reqwest 0.12.9",
  "rust-embed",
  "serde",
  "serde_json",
  "url",
- "utoipa",
+ "utoipa 5.2.0",
  "zip",
 ]
 
@@ -7920,9 +7953,9 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "1.1.4"
+version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9cc23c04387f4da0374be4533ad1208cbb091d5c11d070dfef13676ad6497164"
+checksum = "99d52293fc86ea7cf13971b3bb81eb21683636e7ae24c729cdaf1b7c4157a352"
 dependencies = [
  "arbitrary",
  "crc32fast",
@@ -7930,8 +7963,23 @@ dependencies = [
  "displaydoc",
  "flate2",
  "indexmap 2.3.0",
- "num_enum",
- "thiserror 1.0.68",
+ "memchr",
+ "thiserror 2.0.3",
+ "zopfli",
+]
+
+[[package]]
+name = "zopfli"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e5019f391bac5cf252e93bbcc53d039ffd62c7bfb7c150414d61369afe57e946"
+dependencies = [
+ "bumpalo",
+ "crc32fast",
+ "lockfree-object-pool",
+ "log",
+ "once_cell",
+ "simd-adler32",
 ]
 
 [[package]]
